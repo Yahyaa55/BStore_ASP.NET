@@ -7,16 +7,34 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using BStore.Data;
 using BStore.Models;
+using Microsoft.AspNetCore.Identity;
 
 namespace BStore.Controllers
 {
     public class CartsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly UserManager<IdentityUser> _userManager;
 
-        public CartsController(ApplicationDbContext context)
+        public async Task<IActionResult> MyCart()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null) return NotFound();
+            var panier = await _context.Cart
+                .Include(x => x.User)
+                .Where(x => x.User.Id == user.Id)
+                .Include(x => x.CartRows)
+                .ThenInclude(cl => cl.Product)
+                .FirstAsync();
+            panier.TotalCart = panier.CartRows.Sum(cl => cl.Product.Price * cl.Quantity);
+            await _context.SaveChangesAsync();
+            return View(panier);
+        }
+
+        public CartsController(ApplicationDbContext context, UserManager<IdentityUser> userManager)
         {
             _context = context;
+            _userManager = userManager;
         }
 
         // GET: Carts

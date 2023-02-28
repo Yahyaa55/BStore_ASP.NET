@@ -7,16 +7,51 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using BStore.Data;
 using BStore.Models;
+using Microsoft.AspNetCore.Identity;
 
 namespace BStore.Controllers
 {
     public class CartRowsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly UserManager<IdentityUser> _userManager;
 
-        public CartRowsController(ApplicationDbContext context)
+        public CartRowsController(ApplicationDbContext context, UserManager<IdentityUser> userManager)
         {
             _context = context;
+            _userManager = userManager;
+        }
+
+        public async Task<IActionResult> AddToCart(int productID, int quantity)
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null) return NotFound();
+            var cart = await _context.Cart
+                .Include(c => c.User)
+                .Where(c => c.User.Id == user.Id)
+                .Include(c => c.CartRows)
+                .ThenInclude(cl => cl.Product)
+                .FirstAsync();
+            var product = await _context.Product.FindAsync(productID);
+            if (product == null) return NotFound();
+            var cartRow = cart.CartRows.FirstOrDefault(cl => cl.Product.Id == productID);
+            if (cartRow == null)
+            {
+                cartRow = new CartRow
+                {
+                    Cart = cart,
+                    Product = product,
+                    Quantity = quantity
+                };
+                _context.CartRow.Add(cartRow);
+            }
+            else
+            {
+                cartRow.Quantity += quantity;
+                _context.CartRow.Add(cartRow);
+            }
+            await _context.SaveChangesAsync();
+            return RedirectToAction("MyCart", controllerName: "Carts");
         }
 
         // GET: CartRows
